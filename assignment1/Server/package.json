@@ -1,0 +1,11 @@
+{
+    "name": "server",
+    "version": "1.0.0",
+    "description": "Image Server",
+    "main": "ImageDB.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "Pratik Narendra Gupta",
+    "license": "ISC"
+}

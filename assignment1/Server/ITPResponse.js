@@ -1,27 +1,62 @@
+/*
+Name: Pratik Narendra Gupta
+Student ID: 251211859
+*/
 
-// You may need to add some statements here
 
-let sequenceNumber = Math.floor(Math.random() * Math.pow(2, 26));
-let timestamp = Date.now();
+const fs = require('fs');
 
 module.exports = {
-    init: function (responseType, imageCount, imageData) {
-        let packet = Buffer.alloc(12);
-        storeBitPacket(packet, 9, 0, 4); // ITP version
-        storeBitPacket(packet, responseType, 30, 2); // Response type
-        storeBitPacket(packet, sequenceNumber, 32, 26); // Sequence number
-        storeBitPacket(packet, timestamp, 58, 32); // Timestamp
-        storeBitPacket(packet, imageCount, 90, 16); // Image count
+    packet: [],
 
-        sequenceNumber = (sequenceNumber + 1) % Math.pow(2, 26);
-        timestamp = Date.now();
+    //--------------------------
+    // getPacket: returns the entire packet
+    // version: the ITP version
+    // responseType: the response type (1 for found, 2 for not found)
+    // sequenceNumber: the sequence number of the request
+    // timestamp: the timestamp of the request
+    // imagePath: the path to the image file
+    //--------------------------
+    getPacket: function (version, responseType, sequenceNumber, timestamp, imagePath, invalid = false) {
+        let imageData;
+        // Read image file into byte array
 
-        let imageBuffer = Buffer.from(imageData);
-        return Buffer.concat([packet, imageBuffer]);
-    },
+        if (!invalid) {
+            responseType = 4;
+            try {
+                // Try to read the image file
+                imageData = fs.readFileSync(imagePath);
+                responseType = 1;
+            } catch (err) {
+                // If the image doesn't exist, set response type to "not found" and imageData to empty
+                responseType = 2;
+                imageData = [];
+            }
+        } else {
 
-    getPacket: function () {
-        return this.init(1, 1, "image"); // Example usage
+            console.log("Invalid request header. Ignoring request.");
+            responseType = 3;
+            imageData = [];
+        }
+
+
+        // Initialize the packet with zeros
+        this.packet = new Array(12 + imageData.length).fill(0);
+
+        // Store the ITP components to the packet (version, response type, sequence number, timestamp)
+        storeBitPacket(this.packet, version, 0, 4);
+        storeBitPacket(this.packet, responseType, 4, 2);
+        storeBitPacket(this.packet, sequenceNumber, 6, 26);
+        storeBitPacket(this.packet, timestamp, 32, 32);
+        storeBitPacket(this.packet, imageData.length, 64, 32);
+
+        // Store the image data to the packet
+        for (let i = 0; i < imageData.length; i++) {
+            this.packet[12 + i] = imageData[i];
+        }
+
+        // Return the packet as a Uint8Array
+        return new Uint8Array(this.packet);
     }
 };
 //// Some usefull methods ////
@@ -43,4 +78,16 @@ function storeBitPacket(packet, value, offset, length) {
         }
         lastBitPosition--;
     }
+}
+
+function parseBitPacket(packet, offset, length) {
+    let number = "";
+    for (var i = 0; i < length; i++) {
+        // let us get the actual byte position of the offset
+        let bytePosition = Math.floor((offset + i) / 8);
+        let bitPosition = 7 - ((offset + i) % 8);
+        let bit = (packet[bytePosition] >> bitPosition) % 2;
+        number = (number << 1) | bit;
+    }
+    return number;
 }

@@ -1,12 +1,16 @@
 {
-  "name": "enter the assignment name here",
-  "version": "1.0.0",
-  "description": "",
-  "main": "../Client/GetImage.js",
-  "dependencies": {
-    "open": "^7.4.2",
-    "yargs": "^17.7.2"
-  },
-  "author": "enter your name here",
-  "license": "ISC"
+    "name": "client",
+    "version": "1.0.0",
+    "description": "Image Client",
+    "main": "GetImage.js",
+    "dependencies": {
+        "minimist": "^1.2.8",
+        "open": "^7.4.2"
+    },
+    "scripts": {
+        "test": " bash test-all.sh -s 127.0.0.1:3000",
+        "reset": "rm -rf downloads/"
+    },
+    "author": "Pratik Narendra Gupta",
+    "license": "ISC"
 }

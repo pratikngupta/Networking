@@ -1,79 +1,89 @@
-// You may need to add some statements here
+/*
+Name: Pratik Narendra Gupta
+Student ID: 251211859
+*/
 
-let timestamp = Date.now();
-let imageName = '';
+// Map of image types to their corresponding codes
+const imageTypes = new Map([
+	["png", 1],
+	["bmp", 2],
+	["tiff", 3],
+	["jpeg", 4],
+	["gif", 5],
+	["raw", 15]
+]);
 
 module.exports = {
-  init: function (imageType, name) {
-    let data = Buffer.alloc(12);
-    storeBitPacket(data, 90, 0, 4); // ITP version
-    storeBitPacket(data, 0, 4, 4); // Request type
-    storeBitPacket(data, timestamp, 32, 32); // Timestamp
-    storeBitPacket(data, imageType, 64, 4); // Image type
-    storeBitPacket(data, name.length, 68, 28); // File name size
+	// Function to create a byte packet for an ITP request
+	// version: the ITP version
+	// imageType: the type of the image (e.g., "png", "jpeg")
+	// fileName: the name of the image file
+	getBytePacket: function (version, imageType, fileName) {
+		// Initialize the packet with zeros
+		let packet = new Array(12 + fileName.length).fill(0);
 
-    timestamp = Date.now();
-    imageName = name;
+		// Generate a random timestamp
+		let timestamp = Math.floor(Math.random() * 999) + 1;
 
-    let nameBuffer = Buffer.from(stringToBytes(name));
-    return Buffer.concat([data, nameBuffer]);
-  },
+		// Get the code for the image type
+		let type = imageTypes.get(imageType) || 0;
 
-  getBytePacket: function () {
-    return this.init(1, "image"); // Example usage
-  }
+		// Store the ITP components to the packet (version, request type, timestamp, image type, file name length)
+		storeBitPacket(packet, version, 0, 4);
+		storeBitPacket(packet, 0, 30, 2);
+		storeBitPacket(packet, timestamp, 32, 32);
+		storeBitPacket(packet, type, 64, 4);
+		storeBitPacket(packet, fileName.length, 68, 28);
+
+		// Convert the file name to bytes and store it to the packet
+		let fileNameBytes = stringToBytes(fileName);
+		packet = [...packet.slice(0, 12), ...fileNameBytes];
+
+		// Return the packet as a Uint8Array
+		return new Uint8Array(packet);
+	},
+
+	// Function to check if an image type is valid
+	// imageType: the type of the image (e.g., "png", "jpeg")
+	isValidImageType: function (imageType) {
+		return imageTypes.has(imageType.toLowerCase());
+	}
 };
 
-//// Some usefull methods ////
-// Feel free to use them, but DO NOT change or add any code in these methods.
-
-// Convert a given string to byte array
+// Function to convert a string to a byte array
 function stringToBytes(str) {
-  var ch,
-    st,
-    re = [];
-  for (var i = 0; i < str.length; i++) {
-    ch = str.charCodeAt(i); // get char
-    st = []; // set up "stack"
-    do {
-      st.push(ch & 0xff); // push byte to stack
-      ch = ch >> 8; // shift value down by 1 byte
-    } while (ch);
-    // add stack contents to result
-    // done because chars have "wrong" endianness
-    re = re.concat(st.reverse());
-  }
-  // return an array of bytes
-  return re;
+	var ch,
+		st,
+		re = [];
+	for (var i = 0; i < str.length; i++) {
+		ch = str.charCodeAt(i);
+		st = [];
+		do {
+			st.push(ch & 0xff);
+			ch = ch >> 8;
+		} while (ch);
+		re = re.concat(st.reverse());
+	}
+	return re;
 }
 
-// Store integer value into specific bit poistion the packet
+// Function to store an integer value into a specific bit position in the packet
+// packet: the packet to store the value in
+// value: the value to store
+// offset: the bit position to start storing the value at
+// length: the number of bits to store the value in
 function storeBitPacket(packet, value, offset, length) {
-  // let us get the actual byte position of the offset
-  let lastBitPosition = offset + length - 1;
-  let number = value.toString(2);
-  let j = number.length - 1;
-  for (var i = 0; i < number.length; i++) {
-    let bytePosition = Math.floor(lastBitPosition / 8);
-    let bitPosition = 7 - (lastBitPosition % 8);
-    if (number.charAt(j--) == "0") {
-      packet[bytePosition] &= ~(1 << bitPosition);
-    } else {
-      packet[bytePosition] |= 1 << bitPosition;
-    }
-    lastBitPosition--;
-  }
-}
-
-// Returns the integer value of the extracted bits fragment for a given packet
-function parseBitPacket(packet, offset, length) {
-  let number = "";
-  for (var i = 0; i < length; i++) {
-    // let us get the actual byte position of the offset
-    let bytePosition = Math.floor((offset + i) / 8);
-    let bitPosition = 7 - ((offset + i) % 8);
-    let bit = (packet[bytePosition] >> bitPosition) % 2;
-    number = (number << 1) | bit;
-  }
-  return number;
+	let lastBitPosition = offset + length - 1;
+	let number = value.toString(2);
+	let j = number.length - 1;
+	for (var i = 0; i < number.length; i++) {
+		let bytePosition = Math.floor(lastBitPosition / 8);
+		let bitPosition = 7 - (lastBitPosition % 8);
+		if (number.charAt(j--) == "0") {
+			packet[bytePosition] &= ~(1 << bitPosition);
+		} else {
+			packet[bytePosition] |= 1 << bitPosition;
+		}
+		lastBitPosition--;
+	}
 }

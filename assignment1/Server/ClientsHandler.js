@@ -1,44 +1,91 @@
-const fs = require('fs');
-let ITPpacket = require('./ITPResponse');
-let singleton = require('./Singleton');
+/*
+Name: Pratik Narendra Gupta
+Student ID: 251211859
+*/
+
+
+let ITPpacket = require("./ITPResponse");
+let singleton = require("./Singleton");
 
 module.exports = {
+    id: 0,
+
+    // Map of image types
+    imageTypeMap: new Map([
+        [1, "PNG"],
+        [2, "BMP"],
+        [3, "TIFF"],
+        [4, "JPEG"],
+        [5, "GIF"],
+        [15, "RAW"]
+    ]),
+
+    // Function to get the image type from the map
+    getImageType: function (imageType) {
+        return this.imageTypeMap.get(imageType) || "unknown";
+    },
+
+    // Function to create a packet based on the version, request type, file name, and type
+    createPacket: function (version, requestType, fileName, type, invalid) {
+        if (version === 9 && requestType === 0) {
+            return ITPpacket.getPacket(version, 1, singleton.getSequenceNumber(), singleton.getTimestamp(), `images/${fileName}.${type.toLowerCase()}`);
+        } else {
+            return ITPpacket.getPacket(version, 4, singleton.getSequenceNumber(), singleton.getTimestamp(), "", invalid);
+        }
+    },
+
+    // Function to handle a client joining the server
     handleClientJoining: function (sock) {
-        sock.on('data', (data) => {
+        this.id = singleton.getTimestamp();
+        console.log(`\nClient-${this.id} is connected at timestamp: ${this.id}`);
 
+        // Event listener for data received from the client
+        sock.on("data", (data) => {
+            invalid = false;
+
+            console.log("\nITP packet received: ");
+            printPacketBit(data);
+
+            // Parse the packet data
             let version = parseBitPacket(data, 0, 4);
-            let requestType = parseBitPacket(data, 4, 4);
-            let imageNameSize = parseBitPacket(data, 8, 24);
-            let imageType = parseBitPacket(data, 32, 4);
-            let timestamp = parseBitPacket(data, 64, 32);
+            let requestType = parseBitPacket(data, 30, 2);
+            let timestamp = parseBitPacket(data, 32, 32);
+            let imageType = parseBitPacket(data, 64, 4);
+            let type = this.getImageType(imageType);
+            let fileNameLength = parseBitPacket(data, 68, 28);
+            let fileName = bytesToString(data.subarray(12, 12 + fileNameLength));
 
-            let name = bytesToString(data.slice(12, 12 + imageNameSize));
-
-            console.log("Version: " + version);
-            console.log("Request Type: " + requestType);
-            console.log("Image Name Size: " + imageNameSize);
-            console.log("Image Type: " + imageType);
-            console.log("Timestamp: " + timestamp);
-            console.log("Name: " + name);
-
-
-            let responsePacket;
-            let imageData;
-
-            // check in ./images folder if the image exists
-            if (fs.existsSync('./images/' + name)) {
-                imageData = fs.readFileSync('./images/' + name);
-                responsePacket = ITPpacket.init(1, 1, imageData);
-            } else {
-                responsePacket = ITPpacket.init(2, 0, '');
+            // Check the validity of the version number and request type
+            if (version !== 9 || (requestType !== 0 && requestType !== 1)) {
+                console.log("Invalid request header. Ignoring request.");
+                invalid = true;
             }
 
+            // Print the parsed data to the console
+            console.log(`\nClient-${this.id} requests: `);
+            console.log(`    --ITP version: ${version}`);
+            console.log(`    --Timestamp: ${timestamp}`);
+            console.log(`    --Request type: ${requestType === 0 ? "Query" : "Unknown"}`);
+            console.log(`    --Image file extension(s): ${type}`);
+            console.log(`    --Image file name: ${fileName}`);
 
-            sock.write(responsePacket);
+            // Create a packet and send it to the client
+            let packet = this.createPacket(version, requestType, fileName, type, invalid);
+            sock.write(packet);
         });
-    }
-};
 
+        // Event listener for the client closing the connection
+        sock.on("close", () => {
+            console.log(`\nClient-${this.id} closed the connection`);
+        });
+
+        // Event listener for errors with the client
+        sock.on("error", (err) => {
+            console.log(`\nError with Client-${this.id}. Closing connection`);
+            sock.end();
+        });
+    },
+};
 //// Some usefull methods ////
 // Feel free to use them, but DO NOT change or add any code in these methods.
 
