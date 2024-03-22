@@ -10,7 +10,6 @@ let singleton = require("./Singleton");
 module.exports = {
     id: 0,
 
-    // Map of image types
     imageTypeMap: new Map([
         [1, "PNG"],
         [2, "BMP"],

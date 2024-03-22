@@ -3,7 +3,6 @@ Name: Pratik Narendra Gupta
 Student ID: 251211859
 */
 
-
 // The Singleton function is responsible for keeping track of time and sequence numbers in the server.
 module.exports = {
     timestamp: null,
