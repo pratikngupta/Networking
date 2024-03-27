@@ -9,7 +9,7 @@ const kadPTP = require('./lib/kadPTP');
 const Peer = require('./lib/Peer');
 const Singleton = require('./lib/Singleton');
 const net = require('net');
-
+const DHTTable = require('./lib/DHTTable');
 
 
 // check if Singleton is initialized, if not, then initialize it
@@ -18,6 +18,7 @@ Singleton.init();
 
 console.log('Singleton initialized');
 console.log('Timer:', Singleton.getTimestamp());
+
 
 // this is the main program file which initializes the network and starts it
 // First check the args pass to the program, if -p is not provided, then start the program as a first peer in the network
@@ -48,10 +49,11 @@ function clientPeer() {
 
     [peerIP, port] = ['127.0.0.1', 0];
 
-
     const peer2 = new Peer(peerName, peerIP, port);
 
-    // Assuming IP is a IPv4 address and port is an integer
+    // create a table to store the peers
+    const table2 = new DHTTable(peer2);
+
     if (!/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(peerIP) || isNaN(port)) {
         console.error("Invalid IP address or port number.");
         process.exit();
@@ -69,8 +71,6 @@ function clientPeer() {
         console.log(`${peerName} listening on ${peerIP}:${port} located at server with ID: ${peer2.getID()} at timestamp ${Singleton.getTimestamp()}`);
     });
 
-
-
     client.on('data', (data) => {
         const message = kadPTP.fromBuffer(data);
         console.log(message);
@@ -78,14 +78,15 @@ function clientPeer() {
         if (message.messageType == 2) {
             console.log(`Received welcome message from ${serverIP}:${serverPORT} with ID: ${peer2.getID()}`);
             console.log(`Received message: ${message.senderName}`);
+            // Assuming DHTTable is a global variable
+            table2.pushBucket(peer2);
+            console.log('Refresh k-Bucket operation is performed');
+            console.log('My DHT:', DHTTable);
+            const helloMessage = new kadPTP(1, 2, [], 'Client');
+            client.write(helloMessage.toBuffer());
+            console.log('Hello packet has been sent.');
         }
     });
-
-    client.on('close', () => {
-        console.log('Connection closed');
-    });
-
-
 }
 
 function firstRun() {
@@ -98,12 +99,14 @@ function firstRun() {
 
     // create a new peer
     const peer_main = new Peer(peerIP, port, peerName);
+    var table
 
     const server = net.createServer();
     new Promise((resolve, reject) => {
         server.listen(port, peerIP, () => {
             port = server.address().port;
             peer_main.setPort(port);
+            table = new DHTTable(peer_main);
             resolve();
         });
     })
@@ -117,66 +120,33 @@ function firstRun() {
 
     // if someone connects to the server, then it is a client
     server.on('connection', (socket) => {
-        handleClientJoining(socket); // You need to implement this function
+        handleClientJoining(socket, table); // You need to implement this function
     });
 }
 
-function handleClientJoining(socket) {
-    const clientIP = socket.remoteAddress;
-    const clientPort = socket.remotePort;
-    console.log(`New client connected: ${clientIP}:${clientPort}`);
+function handleClientJoining(socket, table) {
+    const clientAddress = `${socket.remoteAddress}:${socket.remotePort}`;
+    console.log(`Connected from peer ${clientAddress}`);
 
-    // Create a new peer for the client
-    const clientPeer = new Peer(clientIP, clientPort);
-
-    // // Add the new peer to the DHT table
-    // network.pushBucket(clientPeer);
-
-    // // Send a welcome message to the new peer
-    // const welcomeMessage = new Message(
-    //     1, // Message type 1 means 'Welcome'
-    //     network.peerList.length, // Number of peers
-    //     network.peerList, // List of peers
-    //     network.peer.getName(), // Sender name
-    //     [] // Empty list of peers
-    // );
-    // socket.write(welcomeMessage.toBuffer());
-
-
-    // The socket may remain open to handle a hello message from the same peer
-    // but should be closed right after
     socket.on('data', (data) => {
         const message = kadPTP.fromBuffer(data);
-        if (message.messageType == 1) { // Assuming message type 2 means 'Hello'
-            console.log(`Received hello message from ${clientIP}:${clientPort} with ID: ${clientPeer.getID()}`);
+        console.log(message);
+
+        if (message.messageType == 1) {
+            console.log(`Received hello message from ${clientAddress} with ID: ${message.senderName}`);
             console.log(`Received message: ${message.senderName}`);
-
-            // // Assuming pushBucket is a method that adds a peer to the appropriate k-bucket
-            // DHTTable.pushBucket(message.sender);
-            // refreshBuckets(DHTTable, message.peers);
-            // socket.end();
-
-            // send hello message to the client
-            const helloMessage = new kadPTP(1, 2, [], 'Server');
-
-            socket.write(helloMessage.toBuffer());
+            // Assuming DHTTable is a global variable
+            table.pushBucket(new Peer(message.senderName, socket.remoteAddress, socket.remotePort));
+            console.log('Refresh k-Bucket operation is performed');
+            console.log('My DHT:', table);
+            const welcomeMessage = new kadPTP(1, 2, [], 'Server');
+            socket.write(welcomeMessage.toBuffer());
+            console.log('Welcome packet has been sent.');
+            table.printDHTTable();
         }
     });
-}
 
-function refreshBuckets(DHTTable, peers) {
-    peers.forEach(peer => {
-        // Assuming pushBucket is a method that adds a peer to the appropriate k-bucket
-        DHTTable.pushBucket(peer);
-    });
-    console.log(DHTTable);
-}
-
-function sendHello(DHTTable) {
-    DHTTable.buckets.forEach(bucket => {
-        bucket.peers.forEach(peer => {
-            const helloMessage = new Message(2, DHTTable); // Assuming 2 is the type for 'Hello'
-            peer.send(helloMessage);
-        });
+    socket.on('close', () => {
+        console.log(`Connection from ${clientAddress} closed`);
     });
 }
