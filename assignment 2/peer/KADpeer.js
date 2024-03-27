@@ -43,6 +43,7 @@ if (argv.p) {
     firstRun();
 }
 
+// if -p is provided, then start the program as a client peer
 function clientPeer() {
     const peerName = argv.n;
     [serverIP, serverPORT] = argv.p.split(':');
@@ -60,15 +61,14 @@ function clientPeer() {
     }
 
     const client = new net.Socket();
-    client.connect(serverPORT, serverIP, () => {
-        console.log(`Connected to server on: ${serverIP}:${serverPORT}`);
 
-        // send HELLO message to the server
-        const helloMessage = new kadPTP(1, 1, [], 'Client');
+    client.connect(serverPORT, serverIP, () => {
+        console.log(`Connected to ${serverIP}:${serverPORT} at timestamp: ${Singleton.getTimestamp()}`);
+        const helloMessage = new kadPTP(1, 1, [], peerName);
         client.write(helloMessage.toBuffer());
         port = client.localPort;
         peer2.setPort(port);
-        console.log(`${peerName} listening on ${peerIP}:${port} located at server with ID: ${peer2.getID()} at timestamp ${Singleton.getTimestamp()}`);
+        console.log(`This peer is ${peerIP}:${port} located at ${peerName} [${peer2.getID()}]`);
     });
 
     client.on('data', (data) => {
@@ -78,24 +78,30 @@ function clientPeer() {
         if (message.messageType == 2) {
             console.log(`Received welcome message from ${serverIP}:${serverPORT} with ID: ${peer2.getID()}`);
             console.log(`Received message: ${message.senderName}`);
-            // Assuming DHTTable is a global variable
-            table2.pushBucket(peer2);
+            const newPeer = new Peer(message.senderName, serverIP, serverPORT);
+            const bucketIndex = table2.getBucketIndex(newPeer);
+
+            if (table2.isBucketEmpty(bucketIndex)) {
+                console.log(`Bucket P${bucketIndex} has no value, adding ${newPeer.getID()}`);
+                table2.pushBucket(newPeer);
+            }
+
+            table2.refreshBuckets(message.peers);
             console.log('Refresh k-Bucket operation is performed');
-            console.log('My DHT:', DHTTable);
-            const helloMessage = new kadPTP(1, 2, [], 'Client');
-            client.write(helloMessage.toBuffer());
-            console.log('Hello packet has been sent.');
+
+            table2.sendHello();
+            console.log('Hello packet has been sent to all peers in DHT.');
         }
     });
 }
-
+// if -p is not provided, then start the program as a first peer in the network
 function firstRun() {
     // get the name of the peer
     const peerName = argv.n;
     console.log(`Peer name: ${peerName}`);
 
     peerIP = '127.0.0.1'; // Default if no -p option provided
-    port = 25000; // Default port
+    port = 0; // Default port
 
     // create a new peer
     const peer_main = new Peer(peerIP, port, peerName);
@@ -122,6 +128,9 @@ function firstRun() {
     server.on('connection', (socket) => {
         handleClientJoining(socket, table); // You need to implement this function
     });
+
+
+
 }
 
 function handleClientJoining(socket, table) {
@@ -135,14 +144,54 @@ function handleClientJoining(socket, table) {
         if (message.messageType == 1) {
             console.log(`Received hello message from ${clientAddress} with ID: ${message.senderName}`);
             console.log(`Received message: ${message.senderName}`);
-            // Assuming DHTTable is a global variable
-            table.pushBucket(new Peer(message.senderName, socket.remoteAddress, socket.remotePort));
+
+            const newPeer = new Peer(socket.remoteAddress, socket.remotePort, message.senderName);
+            const bucketIndex = table.getBucketIndex(newPeer);
+
+            if (table.isBucketEmpty(bucketIndex)) {
+                console.log(`Bucket P${bucketIndex} has no value, adding ${newPeer.getID()}`);
+                table.pushBucket(newPeer);
+            } else {
+                console.log(`Bucket P${bucketIndex} is full, checking if we need to change the stored value`);
+                const currentPeer = table.getPeer(bucketIndex);
+                if (table.isNewPeerCloser(bucketIndex, newPeer)) {
+                    console.log(`New peer is closer, updating value`);
+                    table.updateBucket(bucketIndex, newPeer);
+                } else {
+                    console.log(`Current value is closest, no update needed`);
+                }
+            }
+
+            table.refreshBuckets(message.peers);
             console.log('Refresh k-Bucket operation is performed');
-            console.log('My DHT:', table);
+
             const welcomeMessage = new kadPTP(1, 2, [], 'Server');
-            socket.write(welcomeMessage.toBuffer());
-            console.log('Welcome packet has been sent.');
+            socket.write(welcomeMessage.toBuffer(), () => {
+                console.log('Welcome packet has been sent.');
+                // socket.end();
+                console.log('Connection closed');
+            });
+
             table.printDHTTable();
+        }
+
+        if (message.messageType == 2) {
+            console.log(`Received welcome message from ${clientAddress} with ID: ${message.senderName}`);
+            console.log(`Received message: ${message.senderName}`);
+
+            const newPeer = new Peer(socket.remoteAddress, socket.remotePort, message.senderName);
+            const bucketIndex = table.getBucketIndex(newPeer);
+
+            if (table.isBucketEmpty(bucketIndex)) {
+                console.log(`Bucket P${bucketIndex} has no value, adding ${newPeer.getID()}`);
+                table.pushBucket(newPeer);
+            }
+
+            table.refreshBuckets(message.peers);
+            console.log('Refresh k-Bucket operation is performed');
+
+            table.sendHello();
+            console.log('Hello packet has been sent to all peers in DHT.');
         }
     });
 
