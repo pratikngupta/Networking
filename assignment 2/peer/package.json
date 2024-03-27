@@ -1,0 +1,16 @@
+{
+  "name": "kademlia",
+  "version": "1.0.0",
+  "description": "Assignment 2w",
+  "main": "KADpeer.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Pratik Narendra Gupta",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^12.0.0",
+    "minimist": "^1.2.8",
+    "yargs": "^17.7.2"
+  }
+}
